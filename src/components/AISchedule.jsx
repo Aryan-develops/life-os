@@ -34,22 +34,19 @@ Respond with a JSON object with these exact keys:
 }`
 
     try {
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'x-api-key': import.meta.env.VITE_ANTHROPIC_API_KEY,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true',
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'claude-haiku-4-5-20251001',
-          max_tokens: 600,
-          messages: [{ role: 'user', content: prompt }],
-        }),
-      })
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${import.meta.env.VITE_GEMINI_API_KEY}`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { maxOutputTokens: 600, temperature: 0.7 },
+          }),
+        }
+      )
       const data = await res.json()
-      const text = data.content?.[0]?.text || ''
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text || ''
       const jsonMatch = text.match(/\{[\s\S]*\}/)
       if (jsonMatch) {
         setSchedule(JSON.parse(jsonMatch[0]))
