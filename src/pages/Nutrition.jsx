@@ -1,10 +1,43 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
-import { Apple, Plus, Pill } from 'lucide-react'
+import { Apple, Plus, Pill, Upload, CheckCircle } from 'lucide-react'
 
 const emptyMacro = { date: '', calories: '', protein_g: '', carbs_g: '', fat_g: '', notes: '' }
 const emptySupp = { date: '', name: '', dose_mg: '', time_taken: '', type: 'supplement' }
+
+function parseCronometerCSV(text) {
+  const lines = text.trim().split('\n')
+  if (lines.length < 2) return []
+  const header = lines[0].split(',').map(h => h.replace(/"/g, '').trim().toLowerCase())
+  const dayIdx = header.findIndex(h => h === 'day')
+  const calIdx = header.findIndex(h => h.includes('energy'))
+  const protIdx = header.findIndex(h => h.includes('protein'))
+  const carbIdx = header.findIndex(h => h.includes('carb') && !h.includes('net'))
+  const fatIdx = header.findIndex(h => h === 'fat')
+
+  const byDate = {}
+  for (let i = 1; i < lines.length; i++) {
+    const cols = lines[i].match(/(".*?"|[^,]+|(?<=,)(?=,)|(?<=,)$)/g) || lines[i].split(',')
+    const clean = cols.map(c => c?.replace(/"/g, '').trim())
+    const date = clean[dayIdx]
+    if (!date || !/^\d{4}-\d{2}-\d{2}/.test(date)) continue
+    const d = date.slice(0, 10)
+    if (!byDate[d]) byDate[d] = { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 }
+    byDate[d].calories += parseFloat(clean[calIdx]) || 0
+    byDate[d].protein_g += parseFloat(clean[protIdx]) || 0
+    byDate[d].carbs_g += parseFloat(clean[carbIdx]) || 0
+    byDate[d].fat_g += parseFloat(clean[fatIdx]) || 0
+  }
+  return Object.entries(byDate).map(([date, m]) => ({
+    date,
+    calories: Math.round(m.calories),
+    protein_g: Math.round(m.protein_g * 10) / 10,
+    carbs_g: Math.round(m.carbs_g * 10) / 10,
+    fat_g: Math.round(m.fat_g * 10) / 10,
+    notes: 'Cronometer import',
+  }))
+}
 
 export default function Nutrition() {
   const [macros, setMacros] = useState([])
@@ -14,6 +47,8 @@ export default function Nutrition() {
   const [tab, setTab] = useState('macros')
   const [saving, setSaving] = useState(false)
   const [showForm, setShowForm] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const [importMsg, setImportMsg] = useState('')
 
   async function load() {
     const [m, s] = await Promise.all([
@@ -44,6 +79,22 @@ export default function Nutrition() {
 
   const avgCals = macros.length ? Math.round(macros.slice(0,7).reduce((s,m)=>s+(m.calories||0),0) / Math.min(macros.slice(0,7).length,7)) : null
 
+  async function importCronometer(e) {
+    const file = e.target.files[0]; if (!file) return
+    setImporting(true); setImportMsg('Parsing Cronometer export...')
+    try {
+      const text = await file.text()
+      const rows = parseCronometerCSV(text)
+      if (!rows.length) { setImportMsg('No data found. Make sure you exported "Servings" from Cronometer.'); setImporting(false); return }
+      await supabase.from('macros').upsert(rows, { onConflict: 'date' })
+      await load()
+      setImportMsg(`✓ Imported ${rows.length} days from Cronometer`)
+    } catch (err) {
+      setImportMsg('Error parsing file: ' + err.message)
+    }
+    setImporting(false)
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -53,8 +104,21 @@ export default function Nutrition() {
           </div>
           <h1 className="page-title">Nutrition</h1>
         </div>
-        <button className="btn btn-primary" onClick={() => setShowForm(v=>!v)}><Plus size={13} /> Log</button>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <label className="btn btn-ghost" style={{ cursor: 'pointer', position: 'relative' }}>
+            {importing ? '⟳ Importing...' : <><Upload size={13} /> Cronometer CSV</>}
+            <input type="file" accept=".csv" style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }} onChange={importCronometer} disabled={importing} />
+          </label>
+          <button className="btn btn-primary" onClick={() => setShowForm(v=>!v)}><Plus size={13} /> Log</button>
+        </div>
       </div>
+
+      {importMsg && (
+        <div style={{ background: importMsg.startsWith('✓') ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)', border: `1px solid ${importMsg.startsWith('✓') ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)'}`, borderRadius: 12, padding: '12px 16px', fontSize: 13, color: importMsg.startsWith('✓') ? '#4ade80' : '#fca5a5', display: 'flex', alignItems: 'center', gap: 8 }}>
+          {importMsg.startsWith('✓') && <CheckCircle size={14} />}
+          {importMsg}
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="tabs">
@@ -111,7 +175,7 @@ export default function Nutrition() {
 
           <div className="card" style={{ overflow: 'hidden' }}>
             <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.05)', fontSize: 13, fontWeight: 700, color: '#fff' }}>History</div>
-            {macros.length===0 && <div style={{ padding:'32px 20px',textAlign:'center',color:'#3d4560',fontSize:13 }}>No macros logged. Import from MyFitnessPal in Integrations or log manually.</div>}
+            {macros.length===0 && <div style={{ padding:'32px 20px',textAlign:'center',color:'#3d4560',fontSize:13 }}>No macros logged. Import from Cronometer CSV or log manually.</div>}
             {macros.map(m=>(
               <div key={m.id} className="table-row">
                 <span style={{ fontSize: 13, color: '#94a3b8', fontWeight: 500 }}>{m.date}</span>
