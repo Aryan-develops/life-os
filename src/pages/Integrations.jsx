@@ -1,27 +1,43 @@
 import { useState, useEffect } from 'react'
-import { RefreshCw, CheckCircle, XCircle, Copy, Zap, Smartphone, BarChart2 } from 'lucide-react'
+import { RefreshCw, CheckCircle, XCircle, Copy, Zap, Smartphone, Mail, Link } from 'lucide-react'
 
 const SUPABASE_URL = 'https://lxvfaxvkbwquselrnaew.supabase.co'
+const GMAIL_ENDPOINT = `${SUPABASE_URL}/functions/v1/gmail-cronometer-sync`
 const HEALTH_ENDPOINT = `${SUPABASE_URL}/functions/v1/health-sync`
-const CRONOMETER_ENDPOINT = `${SUPABASE_URL}/functions/v1/cronometer-sync`
 
 export default function Integrations() {
   const [copied, setCopied] = useState('')
-  const [cronoStatus, setCronoStatus] = useState(null)
-  const [cronoMsg, setCronoMsg] = useState('')
-  const [cronoLastSync, setCronoLastSync] = useState(null)
+  const [gmailStatus, setGmailStatus] = useState(null)
+  const [gmailMsg, setGmailMsg] = useState('')
+  const [gmailLastSync, setGmailLastSync] = useState(null)
+  const [gmailConnected, setGmailConnected] = useState(false)
 
   useEffect(() => {
-    const saved = localStorage.getItem('crono_last_sync')
-    if (saved) setCronoLastSync(saved)
+    const saved = localStorage.getItem('gmail_last_sync')
+    if (saved) setGmailLastSync(saved)
+    const connected = localStorage.getItem('gmail_connected')
+    if (connected) setGmailConnected(true)
+
+    // Check URL params after OAuth redirect
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('gmail_connected')) {
+      setGmailConnected(true)
+      localStorage.setItem('gmail_connected', '1')
+      window.history.replaceState({}, '', '/integrations')
+    }
+    if (params.get('gmail_error')) {
+      setGmailStatus('error')
+      setGmailMsg('Gmail connection failed: ' + params.get('gmail_error'))
+      window.history.replaceState({}, '', '/integrations')
+    }
   }, [])
 
-  async function syncCronometer() {
+  async function syncGmail() {
     const apiKey = import.meta.env.VITE_SYNC_API_KEY
-    if (!apiKey) { setCronoStatus('error'); setCronoMsg('VITE_SYNC_API_KEY not set in Vercel env vars'); return }
-    setCronoStatus('syncing'); setCronoMsg('')
+    if (!apiKey) { setGmailStatus('error'); setGmailMsg('VITE_SYNC_API_KEY not set'); return }
+    setGmailStatus('syncing'); setGmailMsg('')
     try {
-      const res = await fetch(CRONOMETER_ENDPOINT, {
+      const res = await fetch(GMAIL_ENDPOINT, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
         body: JSON.stringify({}),
@@ -29,16 +45,16 @@ export default function Integrations() {
       const data = await res.json()
       if (res.ok && data.ok) {
         const ts = new Date().toLocaleString()
-        setCronoStatus('ok')
-        setCronoMsg(`Synced ${data.date}: ${data.macros?.calories ?? '?'} kcal · ${data.macros?.protein_g ?? '?'}g protein`)
-        setCronoLastSync(ts)
-        localStorage.setItem('crono_last_sync', ts)
+        setGmailStatus('ok')
+        setGmailMsg(`Synced ${data.date}: ${data.macros?.calories ?? '?'} kcal · ${data.macros?.protein_g ?? '?'}g protein`)
+        setGmailLastSync(ts)
+        localStorage.setItem('gmail_last_sync', ts)
       } else {
-        setCronoStatus('error')
-        setCronoMsg(data.error || 'Sync failed')
+        setGmailStatus('error')
+        setGmailMsg(data.error || 'Sync failed')
       }
     } catch (err) {
-      setCronoStatus('error'); setCronoMsg(err.message)
+      setGmailStatus('error'); setGmailMsg(err.message)
     }
   }
 
@@ -72,45 +88,78 @@ export default function Integrations() {
         </div>
       </div>
 
-      {/* Cronometer */}
+      {/* Cronometer via Gmail */}
       <div className="card" style={{ padding: 24 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(251,191,36,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <BarChart2 size={19} color="#fbbf24" />
+            <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(234,179,8,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Mail size={19} color="#eab308" />
             </div>
             <div>
-              <div style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>Cronometer</div>
-              <div style={{ fontSize: 12, color: '#3d4560', marginTop: 2 }}>Auto-syncs daily at 9 AM UTC · logs in with your credentials</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>Cronometer → Gmail Sync</div>
+              <div style={{ fontSize: 12, color: '#3d4560', marginTop: 2 }}>
+                Reads your daily Cronometer summary email · auto-syncs at 9 AM UTC
+              </div>
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#fbbf24', boxShadow: '0 0 8px #fbbf24' }} />
-            <span style={{ fontSize: 12, color: '#fbbf24', fontWeight: 600 }}>Active</span>
+            <div style={{ width: 7, height: 7, borderRadius: '50%', background: gmailConnected ? '#22c55e' : '#475569', boxShadow: gmailConnected ? '0 0 8px #22c55e' : 'none' }} />
+            <span style={{ fontSize: 12, fontWeight: 600, color: gmailConnected ? '#22c55e' : '#475569' }}>
+              {gmailConnected ? 'Connected' : 'Not connected'}
+            </span>
           </div>
         </div>
 
-        {cronoStatus && (
+        {/* Gmail OAuth button */}
+        {!gmailConnected ? (
+          <div style={{ marginBottom: 16 }}>
+            <a
+              href="/api/gmail-auth"
+              className="btn btn-primary"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 8, textDecoration: 'none' }}
+            >
+              <Link size={13} /> Connect Gmail
+            </a>
+            <div style={{ fontSize: 12, color: '#3d4560', marginTop: 10, lineHeight: 1.6 }}>
+              Grants read-only access to find Cronometer summary emails. No other emails are read.
+            </div>
+          </div>
+        ) : (
+          <div style={{ marginBottom: 16, padding: '10px 14px', background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.15)', borderRadius: 10, fontSize: 13, color: '#4ade80', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <CheckCircle size={14} /> Gmail connected — Cronometer emails will be parsed automatically
+          </div>
+        )}
+
+        {gmailStatus && (
           <div style={{
             display: 'flex', alignItems: 'center', gap: 10, borderRadius: 10,
             padding: '10px 14px', marginBottom: 16, fontSize: 13,
-            background: cronoStatus === 'ok' ? 'rgba(34,197,94,0.08)' : cronoStatus === 'error' ? 'rgba(239,68,68,0.08)' : 'rgba(251,191,36,0.08)',
-            border: `1px solid ${cronoStatus === 'ok' ? 'rgba(34,197,94,0.2)' : cronoStatus === 'error' ? 'rgba(239,68,68,0.2)' : 'rgba(251,191,36,0.2)'}`,
-            color: cronoStatus === 'ok' ? '#4ade80' : cronoStatus === 'error' ? '#fca5a5' : '#fde68a',
+            background: gmailStatus === 'ok' ? 'rgba(34,197,94,0.08)' : gmailStatus === 'error' ? 'rgba(239,68,68,0.08)' : 'rgba(234,179,8,0.08)',
+            border: `1px solid ${gmailStatus === 'ok' ? 'rgba(34,197,94,0.2)' : gmailStatus === 'error' ? 'rgba(239,68,68,0.2)' : 'rgba(234,179,8,0.2)'}`,
+            color: gmailStatus === 'ok' ? '#4ade80' : gmailStatus === 'error' ? '#fca5a5' : '#fde68a',
           }}>
-            {cronoStatus === 'ok' && <CheckCircle size={14} />}
-            {cronoStatus === 'error' && <XCircle size={14} />}
-            {cronoStatus === 'syncing' && <RefreshCw size={14} />}
-            <span>{cronoMsg || 'Syncing...'}</span>
+            {gmailStatus === 'ok' && <CheckCircle size={14} />}
+            {gmailStatus === 'error' && <XCircle size={14} />}
+            {gmailStatus === 'syncing' && <RefreshCw size={14} />}
+            <span>{gmailMsg || 'Syncing...'}</span>
           </div>
         )}
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          <button className="btn" style={{ background: 'rgba(251,191,36,0.15)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.25)', minWidth: 120 }} onClick={syncCronometer} disabled={cronoStatus === 'syncing'}>
+          <button
+            className="btn"
+            style={{ background: 'rgba(234,179,8,0.15)', color: '#eab308', border: '1px solid rgba(234,179,8,0.25)', minWidth: 120 }}
+            onClick={syncGmail}
+            disabled={gmailStatus === 'syncing' || !gmailConnected}
+          >
             <RefreshCw size={13} />
-            {cronoStatus === 'syncing' ? 'Syncing...' : 'Sync Now'}
+            {gmailStatus === 'syncing' ? 'Syncing...' : 'Sync Now'}
           </button>
-          {cronoLastSync && <span style={{ fontSize: 12, color: '#3d4560' }}>Last synced: {cronoLastSync}</span>}
+          {gmailLastSync && <span style={{ fontSize: 12, color: '#3d4560' }}>Last synced: {gmailLastSync}</span>}
+        </div>
+
+        <div style={{ marginTop: 16, padding: '12px 14px', background: 'rgba(255,255,255,0.03)', borderRadius: 10, border: '1px solid rgba(255,255,255,0.05)', fontSize: 12, color: '#64748b', lineHeight: 1.7 }}>
+          Also enable <strong style={{ color: '#94a3b8' }}>Daily Summary</strong> emails in Cronometer: Settings → Notifications → Daily Summary → On. Emails arrive each morning and are synced automatically.
         </div>
       </div>
 
@@ -122,7 +171,7 @@ export default function Integrations() {
           </div>
           <div>
             <div style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>Apple Health</div>
-            <div style={{ fontSize: 12, color: '#3d4560', marginTop: 2 }}>Syncs via iOS Shortcut · Set to run automatically every morning</div>
+            <div style={{ fontSize: 12, color: '#3d4560', marginTop: 2 }}>Syncs via iOS Shortcut · runs automatically every morning</div>
           </div>
         </div>
 
@@ -160,9 +209,9 @@ export default function Integrations() {
       {/* Status tiles */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
         {[
-          { label: 'Cronometer Auto-Sync', value: 'Daily 9AM UTC', color: '#fbbf24' },
+          { label: 'Gmail Sync', value: gmailConnected ? 'Connected' : 'Not set up', color: gmailConnected ? '#22c55e' : '#475569' },
+          { label: 'Auto-Sync', value: 'Daily 9AM UTC', color: '#eab308' },
           { label: 'Health Endpoint', value: 'Live', color: '#a78bfa' },
-          { label: 'CSV Import', value: 'Also available', color: '#60a5fa' },
         ].map(s => (
           <div key={s.label} className="card" style={{ padding: '18px 20px' }}>
             <div className="section-title" style={{ marginBottom: 8 }}>{s.label}</div>
@@ -176,4 +225,3 @@ export default function Integrations() {
     </div>
   )
 }
-
