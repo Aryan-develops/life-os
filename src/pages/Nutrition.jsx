@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
+import { Apple, Plus, Pill } from 'lucide-react'
 
 const emptyMacro = { date: '', calories: '', protein_g: '', carbs_g: '', fat_g: '', notes: '' }
 const emptySupp = { date: '', name: '', dose_mg: '', time_taken: '', type: 'supplement' }
@@ -12,133 +13,113 @@ export default function Nutrition() {
   const [suppForm, setSuppForm] = useState(emptySupp)
   const [tab, setTab] = useState('macros')
   const [saving, setSaving] = useState(false)
+  const [showForm, setShowForm] = useState(false)
 
   async function load() {
     const [m, s] = await Promise.all([
-      supabase.from('macros').select('*').order('date', { ascending: false }).limit(14),
-      supabase.from('stimulants').select('*').order('date', { ascending: false }).limit(30),
+      supabase.from('macros').select('*').order('date', { ascending: false }).limit(30),
+      supabase.from('stimulants').select('*').order('date', { ascending: false }).limit(50),
     ])
-    setMacros(m.data || [])
-    setSupps(s.data || [])
+    setMacros(m.data || []); setSupps(s.data || [])
   }
-
   useEffect(() => { load() }, [])
 
   async function saveMacro(e) {
-    e.preventDefault()
-    setSaving(true)
-    await supabase.from('macros').insert([{
-      ...macroForm,
-      calories: parseInt(macroForm.calories) || null,
-      protein_g: parseFloat(macroForm.protein_g) || null,
-      carbs_g: parseFloat(macroForm.carbs_g) || null,
-      fat_g: parseFloat(macroForm.fat_g) || null,
-    }])
-    setMacroForm(emptyMacro)
-    await load()
-    setSaving(false)
+    e.preventDefault(); setSaving(true)
+    await supabase.from('macros').insert([{ ...macroForm, calories: parseInt(macroForm.calories)||null, protein_g: parseFloat(macroForm.protein_g)||null, carbs_g: parseFloat(macroForm.carbs_g)||null, fat_g: parseFloat(macroForm.fat_g)||null }])
+    setMacroForm(emptyMacro); setShowForm(false); await load(); setSaving(false)
   }
-
   async function saveSupp(e) {
-    e.preventDefault()
-    setSaving(true)
-    await supabase.from('stimulants').insert([{
-      ...suppForm,
-      dose_mg: parseFloat(suppForm.dose_mg) || null,
-    }])
-    setSuppForm(emptySupp)
-    await load()
-    setSaving(false)
+    e.preventDefault(); setSaving(true)
+    await supabase.from('stimulants').insert([{ ...suppForm, dose_mg: parseFloat(suppForm.dose_mg)||null }])
+    setSuppForm(emptySupp); setShowForm(false); await load(); setSaving(false)
   }
 
   const today = macros[0]
   const macroChart = today ? [
-    { name: 'Protein', value: today.protein_g || 0, color: '#6366f1' },
-    { name: 'Carbs', value: today.carbs_g || 0, color: '#fbbf24' },
-    { name: 'Fat', value: today.fat_g || 0, color: '#f87171' },
+    { name: 'Protein', value: today.protein_g||0, color: '#818cf8' },
+    { name: 'Carbs', value: today.carbs_g||0, color: '#fbbf24' },
+    { name: 'Fat', value: today.fat_g||0, color: '#f87171' },
   ] : []
 
-  return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-white">Nutrition</h1>
+  const avgCals = macros.length ? Math.round(macros.slice(0,7).reduce((s,m)=>s+(m.calories||0),0) / Math.min(macros.slice(0,7).length,7)) : null
 
-      <div className="flex gap-2">
-        {['macros', 'supplements'].map(t => (
-          <button key={t} onClick={() => setTab(t)}
-            className="px-4 py-2 rounded-lg text-sm font-medium capitalize transition-all"
-            style={{ background: tab === t ? '#4f46e5' : '#1e1e2e', color: tab === t ? '#fff' : '#94a3b8' }}>
-            {t}
-          </button>
-        ))}
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(52,211,153,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Apple size={17} color="#34d399" />
+          </div>
+          <h1 className="page-title">Nutrition</h1>
+        </div>
+        <button className="btn btn-primary" onClick={() => setShowForm(v=>!v)}><Plus size={13} /> Log</button>
+      </div>
+
+      {/* Tabs */}
+      <div className="tabs">
+        <button className={`tab${tab==='macros'?' active':''}`} onClick={()=>{setTab('macros');setShowForm(false)}}>Macros</button>
+        <button className={`tab${tab==='supplements'?' active':''}`} onClick={()=>{setTab('supplements');setShowForm(false)}}>Supplements & Stims</button>
       </div>
 
       {tab === 'macros' && (
         <>
-          <form onSubmit={saveMacro} className="card p-5 grid grid-cols-2 md:grid-cols-3 gap-4">
-            <div>
-              <label className="text-xs text-slate-500 mb-1 block">Date</label>
-              <input type="date" value={macroForm.date} onChange={e => setMacroForm(f => ({ ...f, date: e.target.value }))} required />
-            </div>
-            <div>
-              <label className="text-xs text-slate-500 mb-1 block">Calories</label>
-              <input type="number" placeholder="2400" value={macroForm.calories} onChange={e => setMacroForm(f => ({ ...f, calories: e.target.value }))} />
-            </div>
-            <div>
-              <label className="text-xs text-slate-500 mb-1 block">Protein (g)</label>
-              <input type="number" placeholder="180" value={macroForm.protein_g} onChange={e => setMacroForm(f => ({ ...f, protein_g: e.target.value }))} />
-            </div>
-            <div>
-              <label className="text-xs text-slate-500 mb-1 block">Carbs (g)</label>
-              <input type="number" placeholder="250" value={macroForm.carbs_g} onChange={e => setMacroForm(f => ({ ...f, carbs_g: e.target.value }))} />
-            </div>
-            <div>
-              <label className="text-xs text-slate-500 mb-1 block">Fat (g)</label>
-              <input type="number" placeholder="80" value={macroForm.fat_g} onChange={e => setMacroForm(f => ({ ...f, fat_g: e.target.value }))} />
-            </div>
-            <div>
-              <label className="text-xs text-slate-500 mb-1 block">Notes</label>
-              <input type="text" placeholder="Meal notes..." value={macroForm.notes} onChange={e => setMacroForm(f => ({ ...f, notes: e.target.value }))} />
-            </div>
-            <div className="col-span-2 md:col-span-3">
-              <button type="submit" disabled={saving} className="px-6 py-2.5 rounded-lg text-white font-medium" style={{ background: '#16a34a' }}>
-                {saving ? 'Saving...' : 'Log Macros'}
-              </button>
-            </div>
-          </form>
-
-          {today && macroChart.length > 0 && (
-            <div className="card p-5 flex items-center gap-8">
-              <ResponsiveContainer width={140} height={140}>
+          {/* Today's snapshot */}
+          {today && (
+            <div className="card" style={{ padding: 22, display: 'flex', alignItems: 'center', gap: 32 }}>
+              <ResponsiveContainer width={130} height={130}>
                 <PieChart>
-                  <Pie data={macroChart} dataKey="value" cx="50%" cy="50%" innerRadius={40} outerRadius={60} strokeWidth={0}>
-                    {macroChart.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                  <Pie data={macroChart} dataKey="value" cx="50%" cy="50%" innerRadius={38} outerRadius={58} strokeWidth={0}>
+                    {macroChart.map((e,i)=><Cell key={i} fill={e.color}/>)}
                   </Pie>
-                  <Tooltip contentStyle={{ background: '#111118', border: '1px solid #1e1e2e', borderRadius: 8 }} />
+                  <Tooltip contentStyle={{background:'#0e0e1a',border:'1px solid rgba(255,255,255,0.08)',borderRadius:10,fontSize:12}}/>
                 </PieChart>
               </ResponsiveContainer>
-              <div className="space-y-2">
-                <div className="text-2xl font-bold text-white">{today.calories} <span className="text-sm text-slate-500 font-normal">kcal</span></div>
-                {macroChart.map(m => (
-                  <div key={m.name} className="flex items-center gap-2 text-sm">
-                    <div className="w-2 h-2 rounded-full" style={{ background: m.color }} />
-                    <span className="text-slate-400">{m.name}</span>
-                    <span className="text-white font-medium">{m.value}g</span>
-                  </div>
-                ))}
+              <div>
+                <div style={{ fontSize: 11, color: '#3d4560', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>Today · {today.date}</div>
+                <div style={{ fontSize: 32, fontWeight: 900, color: '#fff', letterSpacing: '-0.03em', marginBottom: 12 }}>{today.calories} <span style={{ fontSize: 14, color: '#475569', fontWeight: 500 }}>kcal</span></div>
+                <div style={{ display: 'flex', gap: 20 }}>
+                  {macroChart.map(m=>(
+                    <div key={m.name}>
+                      <div style={{ fontSize: 10, color: '#3d4560', marginBottom: 2 }}>{m.name}</div>
+                      <div style={{ fontSize: 16, fontWeight: 700, color: m.color }}>{m.value}g</div>
+                    </div>
+                  ))}
+                </div>
+                {avgCals && <div style={{ fontSize: 11, color: '#3d4560', marginTop: 10 }}>7-day avg: {avgCals} kcal</div>}
               </div>
             </div>
           )}
 
-          <div className="card overflow-hidden">
-            <div className="px-5 py-4 border-b border-slate-800/50"><span className="text-sm font-medium text-slate-400">History</span></div>
-            {macros.map(m => (
-              <div key={m.id} className="px-5 py-3.5 flex items-center justify-between border-b border-slate-800/30 last:border-0">
-                <span className="text-sm text-white">{m.date}</span>
-                <div className="flex gap-4 text-xs">
-                  <span className="text-slate-300">{m.calories} kcal</span>
-                  <span className="text-indigo-400">P {m.protein_g}g</span>
-                  <span className="text-amber-400">C {m.carbs_g}g</span>
-                  <span className="text-red-400">F {m.fat_g}g</span>
+          {showForm && (
+            <form onSubmit={saveMacro} className="card animate-fade-in" style={{ padding: 22 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#fff', marginBottom: 18 }}>Log Daily Macros</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 14 }}>
+                <div><label className="label">Date</label><input type="date" value={macroForm.date} onChange={e=>setMacroForm(f=>({...f,date:e.target.value}))} required /></div>
+                <div><label className="label">Calories</label><input type="number" placeholder="2400" value={macroForm.calories} onChange={e=>setMacroForm(f=>({...f,calories:e.target.value}))} /></div>
+                <div><label className="label">Protein (g)</label><input type="number" placeholder="180" value={macroForm.protein_g} onChange={e=>setMacroForm(f=>({...f,protein_g:e.target.value}))} /></div>
+                <div><label className="label">Carbs (g)</label><input type="number" placeholder="250" value={macroForm.carbs_g} onChange={e=>setMacroForm(f=>({...f,carbs_g:e.target.value}))} /></div>
+                <div><label className="label">Fat (g)</label><input type="number" placeholder="80" value={macroForm.fat_g} onChange={e=>setMacroForm(f=>({...f,fat_g:e.target.value}))} /></div>
+                <div><label className="label">Notes</label><input type="text" placeholder="Meal notes..." value={macroForm.notes} onChange={e=>setMacroForm(f=>({...f,notes:e.target.value}))} /></div>
+              </div>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button type="submit" disabled={saving} className="btn btn-green">{saving ? 'Saving...' : 'Save Macros'}</button>
+                <button type="button" className="btn btn-ghost" onClick={()=>setShowForm(false)}>Cancel</button>
+              </div>
+            </form>
+          )}
+
+          <div className="card" style={{ overflow: 'hidden' }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.05)', fontSize: 13, fontWeight: 700, color: '#fff' }}>History</div>
+            {macros.length===0 && <div style={{ padding:'32px 20px',textAlign:'center',color:'#3d4560',fontSize:13 }}>No macros logged. Import from MyFitnessPal in Integrations or log manually.</div>}
+            {macros.map(m=>(
+              <div key={m.id} className="table-row">
+                <span style={{ fontSize: 13, color: '#94a3b8', fontWeight: 500 }}>{m.date}</span>
+                <div style={{ display: 'flex', gap: 20 }}>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: '#fff' }}>{m.calories} <span style={{ fontSize: 11, color: '#475569', fontWeight: 400 }}>kcal</span></span>
+                  <span style={{ fontSize: 12, color: '#818cf8' }}>P {m.protein_g}g</span>
+                  <span style={{ fontSize: 12, color: '#fbbf24' }}>C {m.carbs_g}g</span>
+                  <span style={{ fontSize: 12, color: '#f87171' }}>F {m.fat_g}g</span>
                 </div>
               </div>
             ))}
@@ -148,51 +129,48 @@ export default function Nutrition() {
 
       {tab === 'supplements' && (
         <>
-          <form onSubmit={saveSupp} className="card p-5 grid grid-cols-2 md:grid-cols-3 gap-4">
-            <div>
-              <label className="text-xs text-slate-500 mb-1 block">Date</label>
-              <input type="date" value={suppForm.date} onChange={e => setSuppForm(f => ({ ...f, date: e.target.value }))} required />
-            </div>
-            <div>
-              <label className="text-xs text-slate-500 mb-1 block">Name</label>
-              <input type="text" placeholder="Creatine, Caffeine, Magnesium..." value={suppForm.name} onChange={e => setSuppForm(f => ({ ...f, name: e.target.value }))} required />
-            </div>
-            <div>
-              <label className="text-xs text-slate-500 mb-1 block">Type</label>
-              <select value={suppForm.type} onChange={e => setSuppForm(f => ({ ...f, type: e.target.value }))}>
-                <option value="supplement">Supplement</option>
-                <option value="stimulant">Stimulant</option>
-                <option value="nootropic">Nootropic</option>
-                <option value="vitamin">Vitamin</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-xs text-slate-500 mb-1 block">Dose (mg)</label>
-              <input type="number" placeholder="200" value={suppForm.dose_mg} onChange={e => setSuppForm(f => ({ ...f, dose_mg: e.target.value }))} />
-            </div>
-            <div>
-              <label className="text-xs text-slate-500 mb-1 block">Time Taken</label>
-              <input type="time" value={suppForm.time_taken} onChange={e => setSuppForm(f => ({ ...f, time_taken: e.target.value }))} />
-            </div>
-            <div className="flex items-end">
-              <button type="submit" disabled={saving} className="w-full px-6 py-2.5 rounded-lg text-white font-medium" style={{ background: '#7c3aed' }}>
-                {saving ? 'Saving...' : 'Log'}
-              </button>
-            </div>
-          </form>
-
-          <div className="card overflow-hidden">
-            <div className="px-5 py-4 border-b border-slate-800/50"><span className="text-sm font-medium text-slate-400">Log</span></div>
-            {supps.map(s => (
-              <div key={s.id} className="px-5 py-3.5 flex items-center justify-between border-b border-slate-800/30 last:border-0">
-                <div>
-                  <span className="text-sm text-white">{s.name}</span>
-                  {s.dose_mg && <span className="text-xs text-slate-500 ml-2">{s.dose_mg}mg</span>}
+          {showForm && (
+            <form onSubmit={saveSupp} className="card animate-fade-in" style={{ padding: 22 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#fff', marginBottom: 18 }}>Log Supplement / Stimulant</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 14 }}>
+                <div><label className="label">Date</label><input type="date" value={suppForm.date} onChange={e=>setSuppForm(f=>({...f,date:e.target.value}))} required /></div>
+                <div><label className="label">Name</label><input type="text" placeholder="Caffeine, Creatine, Magnesium..." value={suppForm.name} onChange={e=>setSuppForm(f=>({...f,name:e.target.value}))} required /></div>
+                <div><label className="label">Type</label>
+                  <select value={suppForm.type} onChange={e=>setSuppForm(f=>({...f,type:e.target.value}))}>
+                    <option value="supplement">Supplement</option>
+                    <option value="stimulant">Stimulant</option>
+                    <option value="nootropic">Nootropic</option>
+                    <option value="vitamin">Vitamin</option>
+                    <option value="mineral">Mineral</option>
+                  </select>
                 </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-xs text-slate-500">{s.time_taken}</span>
-                  <span className="text-xs text-slate-600">{s.date}</span>
-                  <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: '#7c3aed22', color: '#a78bfa' }}>{s.type}</span>
+                <div><label className="label">Dose (mg)</label><input type="number" placeholder="200" value={suppForm.dose_mg} onChange={e=>setSuppForm(f=>({...f,dose_mg:e.target.value}))} /></div>
+                <div><label className="label">Time Taken</label><input type="time" value={suppForm.time_taken} onChange={e=>setSuppForm(f=>({...f,time_taken:e.target.value}))} /></div>
+              </div>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button type="submit" disabled={saving} className="btn btn-primary">{saving ? 'Saving...' : 'Save'}</button>
+                <button type="button" className="btn btn-ghost" onClick={()=>setShowForm(false)}>Cancel</button>
+              </div>
+            </form>
+          )}
+
+          <div className="card" style={{ overflow: 'hidden' }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.05)', fontSize: 13, fontWeight: 700, color: '#fff' }}>Log</div>
+            {supps.length===0 && <div style={{ padding:'32px 20px',textAlign:'center',color:'#3d4560',fontSize:13 }}>No supplements logged yet.</div>}
+            {supps.map(s=>(
+              <div key={s.id} className="table-row">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ width: 30, height: 30, borderRadius: 8, background: typeColor(s.type)+'18', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Pill size={13} color={typeColor(s.type)} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: '#e2e8f0' }}>{s.name}</div>
+                    <div style={{ fontSize: 11, color: '#3d4560' }}>{s.date}{s.time_taken ? ` · ${s.time_taken}` : ''}</div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  {s.dose_mg && <span style={{ fontSize: 13, fontWeight: 700, color: '#94a3b8' }}>{s.dose_mg}mg</span>}
+                  <span className="badge" style={{ background: typeColor(s.type)+'18', color: typeColor(s.type) }}>{s.type}</span>
                 </div>
               </div>
             ))}
@@ -201,4 +179,9 @@ export default function Nutrition() {
       )}
     </div>
   )
+}
+
+function typeColor(t) {
+  const m = { stimulant:'#fbbf24', supplement:'#818cf8', nootropic:'#38bdf8', vitamin:'#34d399', mineral:'#a78bfa' }
+  return m[t]||'#64748b'
 }

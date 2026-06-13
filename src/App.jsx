@@ -8,13 +8,14 @@ import Nutrition from './pages/Nutrition'
 import Goals from './pages/Goals'
 import Business from './pages/Business'
 import Finances from './pages/Finances'
+import Integrations from './pages/Integrations'
 
 export default function App() {
   return (
     <BrowserRouter>
-      <div className="flex min-h-screen" style={{ background: '#0a0a0f' }}>
+      <div style={{ display: 'flex', minHeight: '100vh', background: '#07070f' }}>
         <Sidebar />
-        <main className="flex-1 ml-56 p-8 max-w-5xl">
+        <main style={{ flex: 1, marginLeft: 220, padding: '36px 40px', maxWidth: 1100, minHeight: '100vh' }}>
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/sleep" element={<Sleep />} />
@@ -24,6 +25,7 @@ export default function App() {
             <Route path="/goals" element={<Goals />} />
             <Route path="/business" element={<Business />} />
             <Route path="/finances" element={<Finances />} />
+            <Route path="/integrations" element={<Integrations />} />
           </Routes>
         </main>
       </div>

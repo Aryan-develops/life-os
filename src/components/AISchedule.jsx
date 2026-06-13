@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { Sparkles, RefreshCw } from 'lucide-react'
-import { buildScheduleContext, alertnessScore, formatHour, recommendedBedtime } from '../lib/scheduleEngine'
+import { Sparkles, RefreshCw, Moon, Zap, Dumbbell, Coffee, Pill } from 'lucide-react'
+import { buildScheduleContext, formatHour } from '../lib/scheduleEngine'
 
 export default function AISchedule({ sleepLogs, stimulants, gymSessions }) {
   const [schedule, setSchedule] = useState(null)
@@ -20,7 +20,7 @@ export default function AISchedule({ sleepLogs, stimulants, gymSessions }) {
 - Usual gym time: ${formatHour(ctx.avgGymHour)}
 - Today's stimulants: ${ctx.todayStims.length ? ctx.todayStims.map(s => `${s.dose_mg}mg ${s.type} at ${s.time_taken}`).join(', ') : 'none logged yet'}
 
-Respond with a JSON object with these exact keys:
+Respond ONLY with a raw JSON object (no markdown, no code fences):
 {
   "bedtime": "10:45 PM",
   "wake": "6:30 AM",
@@ -41,7 +41,7 @@ Respond with a JSON object with these exact keys:
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { maxOutputTokens: 600, temperature: 0.7 },
+            generationConfig: { maxOutputTokens: 700, temperature: 0.7 },
           }),
         }
       )
@@ -51,87 +51,105 @@ Respond with a JSON object with these exact keys:
       if (jsonMatch) {
         setSchedule(JSON.parse(jsonMatch[0]))
       } else {
-        setError('Could not parse schedule. Try again.')
+        setError('Could not parse schedule response. Try again.')
       }
     } catch (e) {
-      setError('Failed to generate schedule. Check your API key.')
+      setError('Failed to generate. Check your Gemini API key in settings.')
     }
     setLoading(false)
   }
 
+  const blocks = schedule ? [
+    schedule.deepWork1 && { icon: Zap, color: '#818cf8', label: 'Deep Work', time: `${schedule.deepWork1.start} – ${schedule.deepWork1.end}`, note: schedule.deepWork1.note },
+    schedule.deepWork2 && { icon: Zap, color: '#818cf8', label: 'Deep Work', time: `${schedule.deepWork2.start} – ${schedule.deepWork2.end}`, note: schedule.deepWork2.note },
+    schedule.gym && { icon: Dumbbell, color: '#4ade80', label: 'Gym', time: `${schedule.gym.start} – ${schedule.gym.end}`, note: schedule.gym.note },
+    schedule.lastCaffeine && { icon: Coffee, color: '#fbbf24', label: 'Last Caffeine', time: schedule.lastCaffeine, note: 'After this, switch to water' },
+    schedule.bedtime && { icon: Moon, color: '#a78bfa', label: 'Sleep', time: schedule.bedtime, note: `Wake at ${schedule.wake}` },
+    ...(schedule.supplements?.map(s => ({ icon: Pill, color: '#38bdf8', label: s.name, time: s.time, note: 'Supplement' })) || []),
+  ].filter(Boolean) : []
+
   return (
-    <div className="card p-6">
-      <div className="flex items-center justify-between mb-5">
-        <div className="flex items-center gap-2">
-          <Sparkles size={18} className="text-indigo-400" />
-          <span className="font-semibold text-white">AI Daily Schedule</span>
+    <div className="card-glow" style={{ padding: '24px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{
+            width: 36, height: 36, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: 'linear-gradient(135deg, rgba(99,102,241,0.3), rgba(139,92,246,0.3))',
+            border: '1px solid rgba(99,102,241,0.3)',
+          }}>
+            <Sparkles size={16} color="#818cf8" />
+          </div>
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>AI Daily Schedule</div>
+            <div style={{ fontSize: 11, color: '#475569' }}>Powered by Gemini 2.5 Pro</div>
+          </div>
         </div>
-        <button
-          onClick={generate}
-          disabled={loading}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white"
-          style={{ background: '#4f46e5' }}
-        >
-          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-          {loading ? 'Generating...' : 'Generate'}
+        <button className="btn btn-primary" onClick={generate} disabled={loading} style={{ minWidth: 120 }}>
+          {loading
+            ? <><span className="animate-spin" style={{ display: 'inline-block' }}>⟳</span> Generating</>
+            : <><RefreshCw size={13} /> Generate</>}
         </button>
       </div>
 
-      {error && <p className="text-red-400 text-sm">{error}</p>}
+      {error && (
+        <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 10, padding: '12px 16px', color: '#fca5a5', fontSize: 13, marginBottom: 16 }}>
+          {error}
+        </div>
+      )}
 
       {!schedule && !loading && (
-        <p className="text-slate-500 text-sm">Click Generate to get your AI-optimized schedule for today.</p>
+        <div style={{ textAlign: 'center', padding: '32px 0' }}>
+          <div style={{ fontSize: 36, marginBottom: 10 }}>🧠</div>
+          <div style={{ fontSize: 14, color: '#475569', marginBottom: 4 }}>No schedule generated yet</div>
+          <div style={{ fontSize: 12, color: '#2d3748' }}>Log some sleep and gym sessions, then hit Generate</div>
+        </div>
       )}
 
       {schedule && (
-        <div className="space-y-4">
-          <p className="text-sm text-indigo-300 italic">"{schedule.insight}"</p>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-xl p-3" style={{ background: '#0d0d1f' }}>
-              <div className="text-xs text-slate-500 mb-1">Sleep Tonight</div>
-              <div className="text-white font-semibold">{schedule.bedtime}</div>
-            </div>
-            <div className="rounded-xl p-3" style={{ background: '#0d0d1f' }}>
-              <div className="text-xs text-slate-500 mb-1">Wake Up</div>
-              <div className="text-white font-semibold">{schedule.wake}</div>
-            </div>
+        <div className="animate-fade-in">
+          {/* Insight banner */}
+          <div style={{
+            background: 'linear-gradient(90deg, rgba(99,102,241,0.12), rgba(139,92,246,0.06))',
+            border: '1px solid rgba(99,102,241,0.15)',
+            borderRadius: 12, padding: '12px 16px', marginBottom: 20,
+            fontSize: 13, color: '#a5b4fc', fontStyle: 'italic',
+          }}>
+            "{schedule.insight}"
           </div>
 
-          <div className="space-y-2">
-            <div className="text-xs text-slate-500 uppercase tracking-wider">Peak Hours</div>
-            <div className="text-sm text-amber-300 font-medium">{schedule.peakHours}</div>
-          </div>
-
-          <div className="space-y-2">
-            {[schedule.deepWork1, schedule.deepWork2].map((block, i) => block && (
-              <div key={i} className="flex items-start gap-3 rounded-xl p-3" style={{ background: '#0d0d1f' }}>
-                <div className="w-2 h-2 rounded-full bg-indigo-400 mt-1.5 shrink-0" />
-                <div>
-                  <div className="text-sm text-white font-medium">Deep Work · {block.start} – {block.end}</div>
-                  <div className="text-xs text-slate-500">{block.note}</div>
-                </div>
+          {/* Key times */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 20 }}>
+            {[
+              { label: 'Sleep Tonight', value: schedule.bedtime, color: '#a78bfa' },
+              { label: 'Wake Up', value: schedule.wake, color: '#fbbf24' },
+              { label: 'Peak Hours', value: schedule.peakHours, color: '#34d399' },
+            ].map(item => (
+              <div key={item.label} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 12, padding: '14px 16px' }}>
+                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#3d4560', marginBottom: 6 }}>{item.label}</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: item.color }}>{item.value}</div>
               </div>
             ))}
-            {schedule.gym && (
-              <div className="flex items-start gap-3 rounded-xl p-3" style={{ background: '#0d0d1f' }}>
-                <div className="w-2 h-2 rounded-full bg-green-400 mt-1.5 shrink-0" />
-                <div>
-                  <div className="text-sm text-white font-medium">Gym · {schedule.gym.start} – {schedule.gym.end}</div>
-                  <div className="text-xs text-slate-500">{schedule.gym.note}</div>
+          </div>
+
+          {/* Timeline */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {blocks.map((block, i) => (
+              <div key={i} style={{
+                display: 'flex', alignItems: 'center', gap: 14,
+                background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)',
+                borderRadius: 12, padding: '12px 16px',
+              }}>
+                <div style={{
+                  width: 32, height: 32, borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: `${block.color}18`, flexShrink: 0,
+                }}>
+                  <block.icon size={14} color={block.color} />
                 </div>
-              </div>
-            )}
-            {schedule.lastCaffeine && (
-              <div className="flex items-start gap-3 rounded-xl p-3" style={{ background: '#0d0d1f' }}>
-                <div className="w-2 h-2 rounded-full bg-amber-400 mt-1.5 shrink-0" />
-                <div className="text-sm text-white font-medium">Last Caffeine · {schedule.lastCaffeine}</div>
-              </div>
-            )}
-            {schedule.supplements?.map((s, i) => (
-              <div key={i} className="flex items-start gap-3 rounded-xl p-3" style={{ background: '#0d0d1f' }}>
-                <div className="w-2 h-2 rounded-full bg-purple-400 mt-1.5 shrink-0" />
-                <div className="text-sm text-white font-medium">{s.name} · {s.time}</div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: '#fff' }}>{block.label}</div>
+                  {block.note && <div style={{ fontSize: 11, color: '#475569', marginTop: 1 }}>{block.note}</div>}
+                </div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: block.color, flexShrink: 0 }}>{block.time}</div>
               </div>
             ))}
           </div>

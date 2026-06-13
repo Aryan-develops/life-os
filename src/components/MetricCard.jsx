@@ -1,15 +1,31 @@
-export default function MetricCard({ label, value, unit, icon: Icon, color = '#6366f1', sub }) {
+export default function MetricCard({ label, value, unit, icon: Icon, color = '#6366f1', sub, trend }) {
   return (
-    <div className="card p-5 flex flex-col gap-3">
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-slate-500 uppercase tracking-wider">{label}</span>
-        {Icon && <Icon size={16} style={{ color }} />}
+    <div className="card card-hover" style={{ padding: '20px 22px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+        <span className="section-title">{label}</span>
+        {Icon && (
+          <div style={{
+            width: 32, height: 32, borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: `${color}18`,
+          }}>
+            <Icon size={15} color={color} />
+          </div>
+        )}
       </div>
-      <div className="flex items-end gap-1.5">
-        <span className="text-3xl font-bold text-white leading-none">{value ?? '—'}</span>
-        {unit && <span className="text-sm text-slate-500 mb-0.5">{unit}</span>}
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, marginBottom: 6 }}>
+        <span className="stat-value" style={{ color: value != null ? '#fff' : '#2d3748' }}>
+          {value ?? '—'}
+        </span>
+        {unit && value != null && (
+          <span style={{ fontSize: 12, color: '#475569', marginBottom: 3 }}>{unit}</span>
+        )}
       </div>
-      {sub && <span className="text-xs text-slate-600">{sub}</span>}
+      {sub && <div style={{ fontSize: 12, color: '#475569' }}>{sub}</div>}
+      {trend != null && (
+        <div style={{ fontSize: 11, color: trend >= 0 ? '#22c55e' : '#ef4444', marginTop: 4, fontWeight: 600 }}>
+          {trend >= 0 ? '↑' : '↓'} {Math.abs(trend)}% vs last week
+        </div>
+      )}
     </div>
   )
 }
