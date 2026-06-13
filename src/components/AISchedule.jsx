@@ -34,24 +34,36 @@ Respond ONLY with a raw JSON object (no markdown, no code fences):
 }`
 
     try {
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${import.meta.env.VITE_GEMINI_API_KEY}`,
-        {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { maxOutputTokens: 700, temperature: 0.7 },
-          }),
-        }
-      )
-      const data = await res.json()
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text || ''
+      // Try models in order until one works
+      const models = ['gemini-2.5-pro-preview-06-05', 'gemini-2.5-flash-preview-05-20', 'gemini-2.0-flash', 'gemini-1.5-pro']
+      let text = ''
+      let lastError = ''
+      for (const model of models) {
+        try {
+          const res = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${import.meta.env.VITE_GEMINI_API_KEY}`,
+            {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: { maxOutputTokens: 1000, temperature: 0.7, responseMimeType: 'application/json' },
+              }),
+            }
+          )
+          const data = await res.json()
+          if (data.error) { lastError = `${model}: ${data.error.message}`; continue }
+          text = data.candidates?.[0]?.content?.parts?.[0]?.text || ''
+          if (text) break
+        } catch (e) { lastError = e.message }
+      }
       const jsonMatch = text.match(/\{[\s\S]*\}/)
       if (jsonMatch) {
         setSchedule(JSON.parse(jsonMatch[0]))
+      } else if (text) {
+        try { setSchedule(JSON.parse(text)) } catch { setError('Could not parse response. ' + lastError) }
       } else {
-        setError('Could not parse schedule response. Try again.')
+        setError('No response from Gemini. ' + lastError)
       }
     } catch (e) {
       setError('Failed to generate. Check your Gemini API key in settings.')
